@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: employee-app
+
+spec:
+  replicas: 1
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+
+  selector:
+    matchLabels:
+      app: backend
+
+  template:
+    metadata:
+      labels:
+        app: backend
+
+    spec:
+      containers:
+      - name: backend
+        image: sam021995/backend-api:v1
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+
+        env:
+
+        - name: DB_Host
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: DB_HOST
+
+        - name: DB_Database
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: DB_NAME
+
+        - name: DB_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: DB_PORT
+
+        - name: DB_User
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: MYSQL_USER
+
+        - name: DB_Password
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: MYSQL_PASSWORD

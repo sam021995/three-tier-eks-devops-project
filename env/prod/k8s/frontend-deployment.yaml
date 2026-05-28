@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: frontend
+  namespace: employee-app
+
+spec:
+  replicas: 1
+
+  strategy:
+    type: RollingUpdate
+
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+
+  selector:
+    matchLabels:
+      app: frontend
+
+  template:
+    metadata:
+      labels:
+        app: frontend
+
+    spec:
+      containers:
+      - name: frontend
+
+        image: sam021995/frontend:v6
+        imagePullPolicy: Always
+
+        ports:
+        - containerPort: 80
