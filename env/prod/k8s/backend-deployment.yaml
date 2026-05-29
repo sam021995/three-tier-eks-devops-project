@@ -25,24 +25,28 @@ spec:
     spec:
       containers:
       - name: backend
-        image: sam021995/backend-api:v1
+        image: sam021995/backend:v4
         imagePullPolicy: Always
+
         ports:
         - containerPort: 8080
 
         env:
 
-        - name: DB_Host
+        # =========================
+        # DB CONFIG FROM CONFIGMAP
+        # =========================
+        - name: DB_HOST
           valueFrom:
             configMapKeyRef:
               name: backend-config
               key: DB_HOST
 
-        - name: DB_Database
+        - name: DB_DATABASE
           valueFrom:
             configMapKeyRef:
               name: backend-config
-              key: DB_NAME
+              key: DB_DATABASE
 
         - name: DB_PORT
           valueFrom:
@@ -50,14 +54,26 @@ spec:
               name: backend-config
               key: DB_PORT
 
-        - name: DB_User
+        # =========================
+        # DB SECRETS
+        # =========================
+        - name: DB_USER
           valueFrom:
             secretKeyRef:
               name: mysql-secret
               key: MYSQL_USER
 
-        - name: DB_Password
+        - name: DB_PASSWORD
           valueFrom:
             secretKeyRef:
               name: mysql-secret
               key: MYSQL_PASSWORD
+
+        # =========================
+        # APP INFO (FOR DASHBOARD)
+        # =========================
+        - name: APP_VERSION
+          value: "v4"
+
+        - name: ENVIRONMENT
+          value: "production"

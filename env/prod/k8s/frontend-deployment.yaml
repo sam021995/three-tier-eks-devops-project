@@ -28,7 +28,7 @@ spec:
       containers:
       - name: frontend
 
-        image: sam021995/frontend:v6
+        image: sam021995/frontend:v2
         imagePullPolicy: Always
 
         ports:
