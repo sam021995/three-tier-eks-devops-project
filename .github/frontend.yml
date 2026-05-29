@@ -1,0 +1,30 @@
+name: Frontend CI Pipeline
+
+on:
+  push:
+    paths:
+    - 'env/prod/frontend-app/**'
+    - '.github/workflows/frontend.yml'
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Login to DockerHub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Build Frontend Docker Image
+      run: |
+        cd env/prod/frontend-app
+        docker build -t sam021995/frontend:latest .
+
+    - name: Push Frontend Docker Image
+      run: |
+        docker push sam021995/frontend:latest
