@@ -4,7 +4,7 @@ on:
   push:
     paths:
       - 'env/prod/frontend-app/**'
-      - 'env/prod/backend-app/**'
+      - 'env/prod/backend-api/**'
       - '.github/workflows/application-cicd.yml'
 
 jobs:
@@ -44,7 +44,7 @@ jobs:
 
     - name: Build Backend Image
       run: |
-        cd env/prod/backend-app
+        cd env/prod/backend-api
         docker build -t sam021995/backend:${{ github.run_number }} .
 
     - name: Push Backend Image
