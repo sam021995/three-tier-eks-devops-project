@@ -1,10 +1,11 @@
-name: Frontend CI-CD Pipeline
+name: Application CI-CD Pipeline
 
 on:
   push:
     paths:
       - 'env/prod/frontend-app/**'
-      - '.github/workflows/frontend.yml'
+      - 'env/prod/backend-app/**'
+      - '.github/workflows/application-cicd.yml'
 
 jobs:
   build-push-deploy:
@@ -28,14 +29,27 @@ jobs:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
 
-    - name: Build Frontend Docker Image
+    # Frontend
+
+    - name: Build Frontend Image
       run: |
         cd env/prod/frontend-app
         docker build -t sam021995/frontend:${{ github.run_number }} .
 
-    - name: Push Frontend Docker Image
+    - name: Push Frontend Image
       run: |
         docker push sam021995/frontend:${{ github.run_number }}
+
+    # Backend
+
+    - name: Build Backend Image
+      run: |
+        cd env/prod/backend-app
+        docker build -t sam021995/backend:${{ github.run_number }} .
+
+    - name: Push Backend Image
+      run: |
+        docker push sam021995/backend:${{ github.run_number }}
 
     - name: Install kubectl
       uses: azure/setup-kubectl@v4
@@ -48,6 +62,14 @@ jobs:
       run: |
         kubectl set image deployment/frontend frontend=sam021995/frontend:${{ github.run_number }} -n employee-app
 
-    - name: Verify Rollout
+    - name: Deploy Backend
+      run: |
+        kubectl set image deployment/backend backend=sam021995/backend:${{ github.run_number }} -n employee-app
+
+    - name: Verify Frontend Rollout
       run: |
         kubectl rollout status deployment/frontend -n employee-app
+
+    - name: Verify Backend Rollout
+      run: |
+        kubectl rollout status deployment/backend -n employee-app
