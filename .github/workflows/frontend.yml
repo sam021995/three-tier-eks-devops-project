@@ -31,11 +31,11 @@ jobs:
     - name: Build Frontend Docker Image
       run: |
         cd env/prod/frontend-app
-        docker build -t sam021995/frontend:latest .
+        docker build -t sam021995/frontend:${{ github.run_number }} .
 
     - name: Push Frontend Docker Image
       run: |
-        docker push sam021995/frontend:latest
+        docker push sam021995/frontend:${{ github.run_number }}
 
     - name: Install kubectl
       uses: azure/setup-kubectl@v4
@@ -44,6 +44,10 @@ jobs:
       run: |
         aws eks update-kubeconfig --region eu-west-1 --name three-tier-eks
 
-    - name: Restart Frontend Deployment
+    - name: Deploy Frontend
       run: |
-        kubectl rollout restart deployment/frontend -n employee-app
+        kubectl set image deployment/frontend frontend=sam021995/frontend:${{ github.run_number }} -n employee-app
+
+    - name: Verify Rollout
+      run: |
+        kubectl rollout status deployment/frontend -n employee-app
