@@ -1,0 +1,48 @@
+frontend:
+  replicas: 1
+
+  image:
+    repository: sam021995/frontend
+    tag: v2
+
+  service:
+    port: 80
+    targetPort: 80
+    type: ClusterIP
+
+backend:
+  replicas: 1
+
+  image:
+    repository: sam021995/backend
+    tag: v4
+
+  appVersion: v4
+
+  environment: production
+
+  service:
+    port: 8080
+    targetPort: 8080
+    type: ClusterIP
+
+database:
+  host: mysql-service
+  port: "3306"
+  name: employees
+
+mysql:
+  image:
+    repository: mysql
+    tag: "5.7"
+
+  database: employees
+
+  user: admin
+  password: admin123
+
+  rootPassword: rootpass
+
+  storage: 1Gi
+
+  replicas: 1

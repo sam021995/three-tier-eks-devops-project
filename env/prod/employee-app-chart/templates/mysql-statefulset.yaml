@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: StatefulSet
+
+metadata:
+  name: mysql
+  namespace: employee-app
+
+spec:
+  serviceName: mysql-service
+
+  replicas: {{ .Values.mysql.replicas }}
+
+  selector:
+    matchLabels:
+      app: mysql
+
+  template:
+    metadata:
+      labels:
+        app: mysql
+
+    spec:
+      containers:
+      - name: mysql
+
+        image: "{{ .Values.mysql.image.repository }}:{{ .Values.mysql.image.tag }}"
+
+        args:
+        - --default-authentication-plugin=mysql_native_password
+        - --ssl=0
+        - --datadir=/var/lib/mysql-data
+
+        ports:
+        - containerPort: 3306
+
+        env:
+
+        - name: MYSQL_ROOT_PASSWORD
+          value: "{{ .Values.mysql.rootPassword }}"
+
+        - name: MYSQL_DATABASE
+          value: "{{ .Values.mysql.database }}"
+
+        - name: MYSQL_USER
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: MYSQL_USER
+
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: MYSQL_PASSWORD
+
+        volumeMounts:
+        - name: mysql-storage
+          mountPath: /var/lib/mysql
+
+        - name: initdb
+          mountPath: /docker-entrypoint-initdb.d
+
+      volumes:
+      - name: initdb
+        configMap:
+          name: mysql-initdb-config
+
+  volumeClaimTemplates:
+  - metadata:
+      name: mysql-storage
+
+    spec:
+      accessModes:
+      - ReadWriteOnce
+
+      storageClassName: ebs-sc
+
+      resources:
+        requests:
+          storage: {{ .Values.mysql.storage }}
