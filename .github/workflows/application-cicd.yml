@@ -2,10 +2,18 @@ name: Application CI-CD Pipeline
 
 on:
   push:
+    branches: 
+      - main
     paths:
       - 'env/prod/frontend-app/**'
       - 'env/prod/backend-api/**'
       - '.github/workflows/application-cicd.yml'
+
+  workflow_dispatch:
+
+concurrency:
+  group: employee-app-prod
+  cancel-in-progress: false
 
 jobs:
   build-push-deploy:
