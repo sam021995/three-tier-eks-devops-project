@@ -1,85 +1,204 @@
 $env:AWS_PROFILE="sid_new"
 
-echo "========================================"
-echo "STEP 1 - Creating Terraform Infrastructure"
-echo "========================================"
+Write-Host "========================================"
+Write-Host "STEP 1 - Terraform Apply"
+Write-Host "========================================"
 
 terraform apply -auto-approve
 
-echo "========================================"
-echo "STEP 2 - Connecting kubectl to EKS Cluster"
-echo "========================================"
+Write-Host "========================================"
+Write-Host "STEP 2 - Update kubeconfig"
+Write-Host "========================================"
 
 aws eks update-kubeconfig --region eu-west-1 --name three-tier-eks
 
-echo "========================================"
-echo "STEP 3 - Waiting for Cluster Stability"
-echo "========================================"
+Write-Host "========================================"
+Write-Host "STEP 3 - Wait for Nodes Ready"
+Write-Host "========================================"
 
-Start-Sleep -Seconds 60
+kubectl wait --for=condition=Ready nodes --all --timeout=300s
+kubectl get nodes
 
-echo "========================================"
-echo "STEP 4 - Cleaning Old EBS CSI Stack (if exists)"
-echo "========================================"
+Write-Host "========================================"
+Write-Host "STEP 4 - Ensure EBS CSI Addon"
+Write-Host "========================================"
 
-aws cloudformation update-termination-protection --no-enable-termination-protection --stack-name eksctl-three-tier-eks-addon-aws-ebs-csi-driver --region eu-west-1 2>$null
+$addonExists = aws eks list-addons --cluster-name three-tier-eks --query "contains(addons, 'aws-ebs-csi-driver')" --output text
 
-aws cloudformation delete-stack --stack-name eksctl-three-tier-eks-addon-aws-ebs-csi-driver --region eu-west-1 2>$null
+if ($addonExists -eq "False") {
 
-Start-Sleep -Seconds 20
+    Write-Host "EBS CSI Addon not found. Creating..."
 
-echo "========================================"
-echo "STEP 5 - Installing EBS CSI Driver"
-echo "========================================"
+    aws eks create-addon `
+        --cluster-name three-tier-eks `
+        --addon-name aws-ebs-csi-driver
 
-eksctl create addon --name aws-ebs-csi-driver --cluster three-tier-eks --region eu-west-1 --force
+    Write-Host "Finding Node Role..."
 
-echo "========================================"
-echo "STEP 6 - Verifying EBS CSI Pods"
-echo "========================================"
+    $nodegroup = aws eks list-nodegroups `
+        --cluster-name three-tier-eks `
+        --query "nodegroups[0]" `
+        --output text
 
-kubectl get pods -n kube-system
+    $nodeRoleArn = aws eks describe-nodegroup `
+        --cluster-name three-tier-eks `
+        --nodegroup-name $nodegroup `
+        --query "nodegroup.nodeRole" `
+        --output text
 
-echo "========================================"
-echo "STEP 7 - Installing NGINX Ingress"
-echo "========================================"
+    $roleName = $nodeRoleArn.Split("/")[-1]
 
-helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+    Write-Host "Attaching AmazonEBSCSIDriverPolicy..."
 
+    aws iam attach-role-policy `
+        --role-name $roleName `
+        --policy-arn arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy
+
+    Write-Host "Waiting 60 seconds for IAM propagation..."
+    Start-Sleep -Seconds 60
+}
+else {
+    Write-Host "EBS CSI Addon already exists"
+}
+
+Write-Host "Waiting for EBS CSI Addon to become ACTIVE..."
+
+$maxAttempts = 30
+$status = ""
+
+for ($i = 1; $i -le $maxAttempts; $i++) {
+
+    $status = aws eks describe-addon `
+        --cluster-name three-tier-eks `
+        --addon-name aws-ebs-csi-driver `
+        --query "addon.status" `
+        --output text 2>$null
+
+    Write-Host "Addon Status: $status"
+
+    if ($status -eq "ACTIVE") {
+        break
+    }
+
+    Start-Sleep -Seconds 10
+}
+
+if ($status -ne "ACTIVE") {
+
+    Write-Host "Restarting EBS CSI Controller Pods..."
+
+    kubectl delete pod `
+        -n kube-system `
+        -l app=ebs-csi-controller `
+        --ignore-not-found=true
+
+    Start-Sleep -Seconds 30
+
+    for ($i = 1; $i -le 18; $i++) {
+
+        $status = aws eks describe-addon `
+            --cluster-name three-tier-eks `
+            --addon-name aws-ebs-csi-driver `
+            --query "addon.status" `
+            --output text 2>$null
+
+        Write-Host "Addon Status: $status"
+
+        if ($status -eq "ACTIVE") {
+            break
+        }
+
+        Start-Sleep -Seconds 10
+    }
+}
+
+if ($status -ne "ACTIVE") {
+    Write-Host "ERROR: EBS CSI Addon failed to become ACTIVE"
+    exit 1
+}
+
+kubectl get pods -n kube-system | findstr ebs
+
+Write-Host "EBS CSI Addon is ACTIVE"
+
+Write-Host "========================================"
+Write-Host "STEP 5 - Install/Upgrade NGINX Ingress"
+Write-Host "========================================"
+
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx 2>$null
 helm repo update
 
-helm uninstall ingress-nginx -n ingress-nginx 2>$null
+helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx `
+    --namespace ingress-nginx `
+    --create-namespace
 
-helm install ingress-nginx ingress-nginx/ingress-nginx --namespace ingress-nginx --create-namespace
+kubectl rollout status deployment/ingress-nginx-controller -n ingress-nginx --timeout=300s
 
-echo "========================================"
-echo "STEP 8 - Cleaning Old Application Namespace"
-echo "========================================"
+Write-Host "========================================"
+Write-Host "STEP 6 - Recreate Namespace"
+Write-Host "========================================"
 
 kubectl delete namespace employee-app --ignore-not-found=true
-
 Start-Sleep -Seconds 20
-
-echo "========================================"
-echo "STEP 9 - Creating Application Namespace"
-echo "========================================"
-
 kubectl create namespace employee-app
 
-echo "========================================"
-echo "STEP 10 - Creating MySQL Secret"
-echo "========================================"
+Write-Host "========================================"
+Write-Host "STEP 7 - Ensure NO conflicting secrets"
+Write-Host "========================================"
 
-kubectl create secret generic mysql-secret --from-literal=MYSQL_USER=admin --from-literal=MYSQL_PASSWORD=admin123 -n employee-app
+kubectl delete secret mysql-secret -n employee-app --ignore-not-found=true
 
-echo "========================================"
-echo "STEP 11 - Deploying Kubernetes Manifests"
-echo "========================================"
+Write-Host "========================================"
+Write-Host "STEP 8 - Deploy Application via Helm"
+Write-Host "========================================"
 
-kubectl apply -f k8s/
+helm upgrade --install employee-app `
+    "D:\Terraform practice 3 tier\three-tier-eks-terraform\env\prod\employee-app-chart" `
+    -n employee-app `
+    --set mysql.user=admin `
+    --set mysql.password=admin123 `
+    --set mysql.rootPassword=rootpass
 
-echo "========================================"
-echo "STEP 12 - Watching Application Pods"
-echo "========================================"
+Write-Host "========================================"
+Write-Host "STEP 9 - Wait for App Components"
+Write-Host "========================================"
 
-kubectl get pods -n employee-app -w
+kubectl wait --for=condition=available deployment/backend -n employee-app --timeout=300s
+kubectl wait --for=condition=available deployment/frontend -n employee-app --timeout=300s
+kubectl rollout status statefulset/mysql -n employee-app --timeout=300s
+
+Write-Host "========================================"
+Write-Host "STEP 10 - Verify Storage"
+Write-Host "========================================"
+
+kubectl get pvc -n employee-app
+kubectl get pv
+
+Write-Host "========================================"
+Write-Host "STEP 11 - Get Ingress URL"
+Write-Host "========================================"
+
+kubectl get ingress -n employee-app
+
+Write-Host "========================================"
+Write-Host "STEP 12 - Watch Pods"
+Write-Host "========================================"
+
+kubectl get pods -n employee-app
+
+Write-Host "========================================"
+Write-Host "STEP 13 - Install Prometheus + Grafana"
+Write-Host "========================================"
+
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts 2>$null
+helm repo update
+
+helm upgrade --install monitoring prometheus-community/kube-prometheus-stack `
+    -n monitoring `
+    --create-namespace
+
+Write-Host "Waiting for monitoring pods to be ready..."
+
+kubectl rollout status statefulset/prometheus-monitoring-kube-prometheus-prometheus `
+    -n monitoring `
+    --timeout=300s

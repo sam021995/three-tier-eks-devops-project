@@ -1,0 +1,35 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+
+metadata:
+  name: employee-app-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+
+spec:
+  groups:
+  - name: employee-app.rules
+
+    rules:
+
+    - alert: EmployeeAppHighRestartCount
+
+      expr: |
+        increase(
+          kube_pod_container_status_restarts_total{
+            namespace="employee-app"
+          }[10m]
+        ) > 0
+
+      for: 1m
+
+      labels:
+        severity: warning
+
+      annotations:
+        summary: Employee app container restarting
+        description: |
+          Pod {{ $labels.pod }}
+          container {{ $labels.container }}
+          restarted more than 3 times in 10 minutes

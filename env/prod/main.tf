@@ -3,15 +3,23 @@ provider "aws" {
   profile = "sid_new"
 }
 
+#################################
+# VPC MODULE
+#################################
 module "vpc" {
   source = "../../modules/vpc"
 }
 
-
+#################################
+# RDS MODULE
+#################################
 module "rds" {
   source = "../../modules/rds"
 }
 
+#################################
+# EKS CLUSTER
+#################################
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 20.0"
@@ -24,32 +32,47 @@ module "eks" {
 
   enable_irsa = true
 
-  # =====================================================
-  # 🔥 FIX: ENABLE PUBLIC ACCESS (THIS IS YOUR MAIN ISSUE)
-  # =====================================================
+  #################################
+  # ACCESS (kubectl fix)
+  #################################
   cluster_endpoint_public_access  = true
   cluster_endpoint_private_access = true
-
-  # ⚠️ For learning only (production = restrict to your IP)
   cluster_endpoint_public_access_cidrs = ["0.0.0.0/0"]
 
+  #################################
+  # MANAGED NODE GROUP
+  #################################
   eks_managed_node_groups = {
     app_nodes = {
-      desired_size = 1
-      min_size     = 1
-      max_size     = 1
+      name = "app-nodes"
+
+      desired_size = 2
+      min_size     = 2
+      max_size     = 2
 
       instance_types = ["t3.small"]
+      capacity_type  = "ON_DEMAND"
 
       subnet_ids = module.vpc.private_subnets
-      ami_type                   = "AL2023_x86_64_STANDARD"
-      use_custom_launch_template = false
+
+      ami_type = "AL2023_x86_64_STANDARD"
+
+      # IMPORTANT: prevent bootstrap issues
+      create_launch_template = true
+
+      labels = {
+        role = "app"
+      }
+
+      tags = {
+        Environment = "prod"
+      }
     }
   }
 
-  # =====================================================
-  # 🔐 IAM ACCESS FIX (kubectl authentication issue)
-  # =====================================================
+  #################################
+  # IAM ACCESS ENTRY (FIXED)
+  #################################
   access_entries = {
     sid_admin = {
       principal_arn = "arn:aws:iam::628658447302:user/sid_new"

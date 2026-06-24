@@ -1,8 +1,14 @@
 $env:AWS_PROFILE="sid_new"
 
+
 echo "========================================"
 echo "STEP 1 - Deleting Application Namespace"
 echo "========================================"
+
+echo "STEP X - Removing Prometheus Stack"
+helm uninstall monitoring -n monitoring 2>$null
+
+kubectl delete namespace monitoring --ignore-not-found=true
 
 kubectl delete namespace employee-app --ignore-not-found=true
 
