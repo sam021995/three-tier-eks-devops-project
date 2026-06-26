@@ -16,68 +16,71 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build-push-deploy:
+  build-and-push:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: Checkout Code
-      uses: actions/checkout@v4
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-    - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: eu-west-1
+      - name: Build Frontend Image
+        run: |
+          cd env/prod/frontend-app
+          docker build -t sam021995/frontend:${{ github.run_number }} .
 
-    - name: Login to DockerHub
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Push Frontend Image
+        run: |
+          docker push sam021995/frontend:${{ github.run_number }}
 
-    # Frontend
+      - name: Build Backend Image
+        run: |
+          cd env/prod/backend-api
+          docker build -t sam021995/backend:${{ github.run_number }} .
 
-    - name: Build Frontend Image
-      run: |
-        cd env/prod/frontend-app
-        docker build -t sam021995/frontend:${{ github.run_number }} .
+      - name: Push Backend Image
+        run: |
+          docker push sam021995/backend:${{ github.run_number }}
 
-    - name: Push Frontend Image
-      run: |
-        docker push sam021995/frontend:${{ github.run_number }}
+  deploy-to-eks:
+    runs-on: ubuntu-latest
+    needs: build-and-push
 
-    # Backend
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: Build Backend Image
-      run: |
-        cd env/prod/backend-api
-        docker build -t sam021995/backend:${{ github.run_number }} .
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-1
 
-    - name: Push Backend Image
-      run: |
-        docker push sam021995/backend:${{ github.run_number }}
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
 
-    - name: Install kubectl
-      uses: azure/setup-kubectl@v4
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --region eu-west-1 --name three-tier-eks
 
-    - name: Update kubeconfig
-      run: |
-        aws eks update-kubeconfig --region eu-west-1 --name three-tier-eks
+      - name: Deploy Frontend
+        run: |
+          kubectl set image deployment/frontend frontend=sam021995/frontend:${{ github.run_number }} -n employee-app
 
-    - name: Deploy Frontend
-      run: |
-        kubectl set image deployment/frontend frontend=sam021995/frontend:${{ github.run_number }} -n employee-app
+      - name: Deploy Backend
+        run: |
+          kubectl set image deployment/backend backend=sam021995/backend:${{ github.run_number }} -n employee-app
 
-    - name: Deploy Backend
-      run: |
-        kubectl set image deployment/backend backend=sam021995/backend:${{ github.run_number }} -n employee-app
+      - name: Verify Frontend Rollout
+        run: |
+          kubectl rollout status deployment/frontend -n employee-app
 
-    - name: Verify Frontend Rollout
-      run: |
-        kubectl rollout status deployment/frontend -n employee-app
-
-    - name: Verify Backend Rollout
-      run: |
-        kubectl rollout status deployment/backend -n employee-app
+      - name: Verify Backend Rollout
+        run: |
+          kubectl rollout status deployment/backend -n employee-app
