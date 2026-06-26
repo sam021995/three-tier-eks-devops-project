@@ -73,14 +73,24 @@ jobs:
         run: |
           kubectl set image deployment/frontend frontend=sam021995/frontend:${{ github.run_number }} -n employee-app
 
+      - name: Verify Frontend Rollout With Rollback
+        run: |
+          kubectl rollout status deployment/frontend -n employee-app --timeout=120s || {
+            echo "Frontend rollout failed. Rolling back..."
+            kubectl rollout undo deployment/frontend -n employee-app
+            kubectl rollout status deployment/frontend -n employee-app --timeout=120s
+            exit 1
+          }
+
       - name: Deploy Backend
         run: |
           kubectl set image deployment/backend backend=sam021995/backend:${{ github.run_number }} -n employee-app
 
-      - name: Verify Frontend Rollout
+      - name: Verify Backend Rollout With Rollback
         run: |
-          kubectl rollout status deployment/frontend -n employee-app
-
-      - name: Verify Backend Rollout
-        run: |
-          kubectl rollout status deployment/backend -n employee-app
+          kubectl rollout status deployment/backend -n employee-app --timeout=120s || {
+            echo "Backend rollout failed. Rolling back..."
+            kubectl rollout undo deployment/backend -n employee-app
+            kubectl rollout status deployment/backend -n employee-app --timeout=120s
+            exit 1
+          }
