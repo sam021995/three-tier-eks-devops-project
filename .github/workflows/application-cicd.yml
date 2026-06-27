@@ -32,20 +32,26 @@ jobs:
       - name: Build Frontend Image
         run: |
           cd env/prod/frontend-app
-          docker build -t sam021995/frontend:${{ github.run_number }} .
+          docker build \
+            -t sam021995/frontend:${{ github.run_number }} \
+            -t sam021995/frontend:latest .
 
       - name: Push Frontend Image
         run: |
           docker push sam021995/frontend:${{ github.run_number }}
+          docker push sam021995/frontend:latest
 
       - name: Build Backend Image
         run: |
           cd env/prod/backend-api
-          docker build -t sam021995/backend:${{ github.run_number }} .
+          docker build \
+            -t sam021995/backend:${{ github.run_number }} \
+            -t sam021995/backend:latest .
 
       - name: Push Backend Image
         run: |
           docker push sam021995/backend:${{ github.run_number }}
+          docker push sam021995/backend:latest
 
   deploy-to-eks:
     runs-on: ubuntu-latest
