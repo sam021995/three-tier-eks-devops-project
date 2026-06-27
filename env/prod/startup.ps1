@@ -19,6 +19,29 @@ Write-Host "========================================"
 kubectl wait --for=condition=Ready nodes --all --timeout=300s
 kubectl get nodes
 
+
+Write-Host "========================================"
+Write-Host "STEP 3.1 - Ensure Worker Node SG Allows Cross-Node Traffic"
+Write-Host "========================================"
+
+$nodeIps = kubectl get nodes -o jsonpath="{.items[*].status.addresses[?(@.type=='InternalIP')].address}"
+
+$nodeSg = aws ec2 describe-instances `
+    --filters "Name=private-ip-address,Values=$($nodeIps -replace ' ', ',')" `
+    --region eu-west-1 `
+    --query "Reservations[0].Instances[0].SecurityGroups[0].GroupId" `
+    --output text
+
+Write-Host "Worker Node Security Group: $nodeSg"
+
+aws ec2 authorize-security-group-ingress `
+    --group-id $nodeSg `
+    --protocol all `
+    --source-group $nodeSg `
+    --region eu-west-1 2>$null
+
+Write-Host "Worker node self-ingress rule ensured"
+
 Write-Host "========================================"
 Write-Host "STEP 4 - Ensure EBS CSI Addon"
 Write-Host "========================================"
