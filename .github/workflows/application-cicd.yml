@@ -2,7 +2,7 @@ name: Application CI-CD Pipeline
 
 on:
   push:
-    branches: 
+    branches:
       - main
     paths:
       - 'env/prod/frontend-app/**'
@@ -15,6 +15,12 @@ concurrency:
   group: employee-app-prod
   cancel-in-progress: false
 
+env:
+  AWS_REGION: eu-west-1
+  ECR_REGISTRY: 628658447302.dkr.ecr.eu-west-1.amazonaws.com
+  FRONTEND_REPO: frontend
+  BACKEND_REPO: backend
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -23,35 +29,39 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Login to DockerHub
-        uses: docker/login-action@v3
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build Frontend Image
         run: |
           cd env/prod/frontend-app
           docker build \
-            -t sam021995/frontend:${{ github.run_number }} \
-            -t sam021995/frontend:latest .
+            -t $ECR_REGISTRY/$FRONTEND_REPO:${{ github.run_number }} \
+            -t $ECR_REGISTRY/$FRONTEND_REPO:latest .
 
       - name: Push Frontend Image
         run: |
-          docker push sam021995/frontend:${{ github.run_number }}
-          docker push sam021995/frontend:latest
+          docker push $ECR_REGISTRY/$FRONTEND_REPO:${{ github.run_number }}
+          docker push $ECR_REGISTRY/$FRONTEND_REPO:latest
 
       - name: Build Backend Image
         run: |
           cd env/prod/backend-api
           docker build \
-            -t sam021995/backend:${{ github.run_number }} \
-            -t sam021995/backend:latest .
+            -t $ECR_REGISTRY/$BACKEND_REPO:${{ github.run_number }} \
+            -t $ECR_REGISTRY/$BACKEND_REPO:latest .
 
       - name: Push Backend Image
         run: |
-          docker push sam021995/backend:${{ github.run_number }}
-          docker push sam021995/backend:latest
+          docker push $ECR_REGISTRY/$BACKEND_REPO:${{ github.run_number }}
+          docker push $ECR_REGISTRY/$BACKEND_REPO:latest
 
   deploy-to-eks:
     runs-on: ubuntu-latest
@@ -66,18 +76,18 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: eu-west-1
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Install kubectl
         uses: azure/setup-kubectl@v4
 
       - name: Update kubeconfig
         run: |
-          aws eks update-kubeconfig --region eu-west-1 --name three-tier-eks
+          aws eks update-kubeconfig --region $AWS_REGION --name three-tier-eks
 
       - name: Deploy Frontend
         run: |
-          kubectl set image deployment/frontend frontend=sam021995/frontend:${{ github.run_number }} -n employee-app
+          kubectl set image deployment/frontend frontend=$ECR_REGISTRY/$FRONTEND_REPO:${{ github.run_number }} -n employee-app
 
       - name: Verify Frontend Rollout With Rollback
         run: |
@@ -90,7 +100,7 @@ jobs:
 
       - name: Deploy Backend
         run: |
-          kubectl set image deployment/backend backend=sam021995/backend:${{ github.run_number }} -n employee-app
+          kubectl set image deployment/backend backend=$ECR_REGISTRY/$BACKEND_REPO:${{ github.run_number }} -n employee-app
 
       - name: Verify Backend Rollout With Rollback
         run: |
