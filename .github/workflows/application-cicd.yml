@@ -190,7 +190,7 @@ jobs:
             --namespace employee-app \
             --create-namespace \
             --set frontend.image.repository=$ECR_REGISTRY/$FRONTEND_REPO \
-            --set frontend.image.tag=${{ github.run_number }} \
+            --set frontend.image.tag= \
             --set backend.image.repository=$ECR_REGISTRY/$BACKEND_REPO \
             --set backend.image.tag=${{ github.run_number }} \
             --dry-run \
