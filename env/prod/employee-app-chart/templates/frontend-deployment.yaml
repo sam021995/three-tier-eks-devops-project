@@ -10,7 +10,6 @@ spec:
 
   strategy:
     type: RollingUpdate
-
     rollingUpdate:
       maxSurge: 0
       maxUnavailable: 1
@@ -21,13 +20,14 @@ spec:
 
   template:
     metadata:
+      annotations:
+        manual-helm-test: "phase-3"
       labels:
         app: frontend
 
     spec:
       containers:
       - name: frontend
-
         image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
         imagePullPolicy: Always
 

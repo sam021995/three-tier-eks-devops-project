@@ -42,6 +42,29 @@ aws ec2 authorize-security-group-ingress `
 
 Write-Host "Worker node self-ingress rule ensured"
 
+
+
+Write-Host "========================================"
+Write-Host "STEP 3.2 - Ensure GitHub OIDC Role Has EKS Access"
+Write-Host "========================================"
+
+$githubRoleArn = "arn:aws:iam::628658447302:role/GitHubActionsEKSDeployRole"
+
+aws eks create-access-entry `
+    --cluster-name three-tier-eks `
+    --region eu-west-1 `
+    --principal-arn $githubRoleArn `
+    --type STANDARD 2>$null
+
+aws eks associate-access-policy `
+    --cluster-name three-tier-eks `
+    --region eu-west-1 `
+    --principal-arn $githubRoleArn `
+    --policy-arn arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy `
+    --access-scope type=cluster 2>$null
+
+Write-Host "GitHub Actions OIDC role EKS access ensured"
+
 Write-Host "========================================"
 Write-Host "STEP 4 - Ensure EBS CSI Addon"
 Write-Host "========================================"

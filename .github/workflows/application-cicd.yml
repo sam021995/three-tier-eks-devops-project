@@ -5,9 +5,9 @@ on:
     branches:
       - main
     paths:
-      - 'env/prod/frontend-app/**'
-      - 'env/prod/backend-api/**'
-      - '.github/workflows/application-cicd.yml'
+      - "env/prod/frontend-app/**"
+      - "env/prod/backend-api/**"
+      - ".github/workflows/application-cicd.yml"
 
   workflow_dispatch:
 
@@ -83,32 +83,31 @@ jobs:
       - name: Install kubectl
         uses: azure/setup-kubectl@v4
 
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
       - name: Update kubeconfig
         run: |
           aws eks update-kubeconfig --region $AWS_REGION --name three-tier-eks
 
-      - name: Deploy Frontend
+      - name: Deploy Application Using Helm
         run: |
-          kubectl set image deployment/frontend frontend=$ECR_REGISTRY/$FRONTEND_REPO:${{ github.run_number }} -n employee-app
+          helm upgrade employee-app ./env/prod/employee-app-chart \
+            --install \
+            --namespace employee-app \
+            --set frontend.image.repository=$ECR_REGISTRY/$FRONTEND_REPO \
+            --set frontend.image.tag=${{ github.run_number }} \
+            --set backend.image.repository=$ECR_REGISTRY/$BACKEND_REPO \
+            --set backend.image.tag=${{ github.run_number }} \
+            --wait \
+            --atomic \
+            --timeout 5m
 
-      - name: Verify Frontend Rollout With Rollback
+      - name: Verify Frontend Rollout
         run: |
-          kubectl rollout status deployment/frontend -n employee-app --timeout=120s || {
-            echo "Frontend rollout failed. Rolling back..."
-            kubectl rollout undo deployment/frontend -n employee-app
-            kubectl rollout status deployment/frontend -n employee-app --timeout=120s
-            exit 1
-          }
+          kubectl rollout status deployment/frontend -n employee-app --timeout=120s
 
-      - name: Deploy Backend
+      - name: Verify Backend Rollout
         run: |
-          kubectl set image deployment/backend backend=$ECR_REGISTRY/$BACKEND_REPO:${{ github.run_number }} -n employee-app
-
-      - name: Verify Backend Rollout With Rollback
-        run: |
-          kubectl rollout status deployment/backend -n employee-app --timeout=120s || {
-            echo "Backend rollout failed. Rolling back..."
-            kubectl rollout undo deployment/backend -n employee-app
-            kubectl rollout status deployment/backend -n employee-app --timeout=120s
-            exit 1
-          }
+          kubectl rollout status deployment/backend -n employee-app --timeout=120s
