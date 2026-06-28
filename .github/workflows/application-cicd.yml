@@ -49,6 +49,15 @@ jobs:
             -t $ECR_REGISTRY/$FRONTEND_REPO:${{ github.run_number }} \
             -t $ECR_REGISTRY/$FRONTEND_REPO:latest .
 
+      - name: Scan Frontend Image With Trivy
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ github.run_number }}
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: 0
+
       - name: Push Frontend Image
         run: |
           docker push $ECR_REGISTRY/$FRONTEND_REPO:${{ github.run_number }}
@@ -60,6 +69,15 @@ jobs:
           docker build \
             -t $ECR_REGISTRY/$BACKEND_REPO:${{ github.run_number }} \
             -t $ECR_REGISTRY/$BACKEND_REPO:latest .
+
+      - name: Scan Backend Image With Trivy
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:${{ github.run_number }}
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: 0
 
       - name: Push Backend Image
         run: |
