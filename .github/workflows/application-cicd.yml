@@ -180,6 +180,22 @@ jobs:
         run: |
           aws eks update-kubeconfig --region $AWS_REGION --name three-tier-eks
 
+      - name: Helm Lint Employee App Chart
+        run: |
+          helm lint env/prod/employee-app-chart
+
+      - name: Helm Dry Run Employee App
+        run: |
+          helm upgrade --install employee-app env/prod/employee-app-chart \
+            --namespace employee-app \
+            --create-namespace \
+            --set frontend.image.repository=$ECR_REGISTRY/$FRONTEND_REPO \
+            --set frontend.image.tag=${{ github.run_number }} \
+            --set backend.image.repository=$ECR_REGISTRY/$BACKEND_REPO \
+            --set backend.image.tag=${{ github.run_number }} \
+            --dry-run \
+            --debug
+
       - name: Deploy Application Using Helm
         run: |
           helm upgrade employee-app ./env/prod/employee-app-chart \
