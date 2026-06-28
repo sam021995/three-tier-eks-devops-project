@@ -54,9 +54,17 @@ jobs:
         with:
           image-ref: ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ github.run_number }}
           format: table
+          output: trivy-frontend-report.txt
+          scanners: vuln
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: 0
+
+      - name: Upload Frontend Trivy Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-frontend-report
+          path: trivy-frontend-report.txt
 
       - name: Push Frontend Image
         run: |
@@ -75,9 +83,17 @@ jobs:
         with:
           image-ref: ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:${{ github.run_number }}
           format: table
+          output: trivy-backend-report.txt
+          scanners: vuln
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: 0
+
+      - name: Upload Backend Trivy Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-backend-report
+          path: trivy-backend-report.txt
 
       - name: Push Backend Image
         run: |
