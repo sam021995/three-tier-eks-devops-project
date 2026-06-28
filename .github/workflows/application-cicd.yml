@@ -18,6 +18,8 @@ concurrency:
 permissions:
   id-token: write
   contents: read
+  security-events: write
+  actions: read
 
 env:
   AWS_REGION: eu-west-1
@@ -49,7 +51,7 @@ jobs:
             -t $ECR_REGISTRY/$FRONTEND_REPO:${{ github.run_number }} \
             -t $ECR_REGISTRY/$FRONTEND_REPO:latest .
 
-      - name: Scan Frontend Image With Trivy
+      - name: Scan Frontend Image With Trivy - TXT
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ github.run_number }}
@@ -58,7 +60,33 @@ jobs:
           scanners: vuln
           severity: HIGH,CRITICAL
           ignore-unfixed: true
+          exit-code: 1
+
+      - name: Upload Frontend Trivy TXT Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-frontend-txt-report
+          path: trivy-frontend-report.txt
+
+      - name: Scan Frontend Image With Trivy - SARIF
+        if: always()
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ github.run_number }}
+          format: sarif
+          output: trivy-frontend-results.sarif
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
           exit-code: 0
+
+      - name: Upload Frontend SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-frontend-results.sarif
+          category: trivy-frontend
 
       - name: Upload Frontend Trivy Report
         uses: actions/upload-artifact@v4
@@ -78,7 +106,7 @@ jobs:
             -t $ECR_REGISTRY/$BACKEND_REPO:${{ github.run_number }} \
             -t $ECR_REGISTRY/$BACKEND_REPO:latest .
 
-      - name: Scan Backend Image With Trivy
+      - name: Scan Backend Image With Trivy - TXT
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:${{ github.run_number }}
@@ -87,7 +115,33 @@ jobs:
           scanners: vuln
           severity: HIGH,CRITICAL
           ignore-unfixed: true
+          exit-code: 1
+
+      - name: Upload Backend Trivy TXT Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-backend-txt-report
+          path: trivy-backend-report.txt
+
+      - name: Scan Backend Image With Trivy - SARIF
+        if: always()
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:${{ github.run_number }}
+          format: sarif
+          output: trivy-backend-results.sarif
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
           exit-code: 0
+
+      - name: Upload Backend SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-backend-results.sarif
+          category: trivy-backend
 
       - name: Upload Backend Trivy Report
         uses: actions/upload-artifact@v4
