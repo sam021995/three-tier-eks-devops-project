@@ -165,7 +165,7 @@ if ($status -ne "ACTIVE") {
 
 kubectl get pods -n kube-system | findstr ebs
 
-Write-Host "EBS CSI Addon is ACTIVE"
+Write-Host "EBS CSI Addon is ACTIVE" 
 
 Write-Host "========================================"
 Write-Host "STEP 5 - Install/Upgrade NGINX Ingress"
@@ -231,7 +231,7 @@ Write-Host "STEP 12 - Watch Pods"
 Write-Host "========================================"
 
 kubectl get pods -n employee-app
-
+<#
 Write-Host "========================================"
 Write-Host "STEP 13 - Install Prometheus + Grafana"
 Write-Host "========================================"
@@ -248,3 +248,5 @@ Write-Host "Waiting for monitoring pods to be ready..."
 kubectl rollout status statefulset/prometheus-monitoring-kube-prometheus-prometheus `
     -n monitoring `
     --timeout=300s
+
+#>
