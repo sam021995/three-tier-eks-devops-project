@@ -12,5 +12,5 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel jaraco.context && 
 COPY app.py .
 
 EXPOSE 8080
-
+#command to run the application
 CMD ["python", "app.py"]
