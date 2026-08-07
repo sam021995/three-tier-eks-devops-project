@@ -54,3 +54,6 @@ mysql:
   storage: 1Gi
 
   replicas: 1
+
+monitoring:
+  enabled: false

@@ -30,6 +30,8 @@ spec:
 
         image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
         imagePullPolicy: Always
+        resources:
+          {{- toYaml .Values.backend.resources | nindent 10 }}
 
         ports:
         - containerPort: 8080
