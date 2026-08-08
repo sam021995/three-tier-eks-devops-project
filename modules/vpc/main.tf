@@ -8,7 +8,7 @@ resource "aws_vpc" "main" {
   enable_dns_hostnames = true
 
   tags = {
-    Name = "three-tier-vpc"
+    Name = "${var.name_prefix}-vpc"
   }
 }
 
@@ -24,10 +24,10 @@ resource "aws_subnet" "public_1" {
   map_public_ip_on_launch = true
 
   tags = {
-    Name = "public-subnet-1"
+    Name = "${var.name_prefix}-public-subnet-1"
 
-    "kubernetes.io/role/elb"              = "1"
-    "kubernetes.io/cluster/three-tier-eks" = "shared"
+    "kubernetes.io/role/elb"                    = "1"
+    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
   }
 }
 
@@ -39,10 +39,10 @@ resource "aws_subnet" "public_2" {
   map_public_ip_on_launch = true
 
   tags = {
-    Name = "public-subnet-2"
+    Name = "${var.name_prefix}-public-subnet-2"
 
-    "kubernetes.io/role/elb"              = "1"
-    "kubernetes.io/cluster/three-tier-eks" = "shared"
+    "kubernetes.io/role/elb"                    = "1"
+    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
   }
 }
 
@@ -56,10 +56,10 @@ resource "aws_subnet" "private_1" {
   availability_zone = "eu-west-1a"
 
   tags = {
-    Name = "private-subnet-1"
+    Name = "${var.name_prefix}-private-subnet-1"
 
-    "kubernetes.io/role/internal-elb"     = "1"
-    "kubernetes.io/cluster/three-tier-eks" = "shared"
+    "kubernetes.io/role/internal-elb"           = "1"
+    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
   }
 }
 
@@ -69,10 +69,10 @@ resource "aws_subnet" "private_2" {
   availability_zone = "eu-west-1b"
 
   tags = {
-    Name = "private-subnet-2"
+    Name = "${var.name_prefix}-private-subnet-2"
 
-    "kubernetes.io/role/internal-elb"     = "1"
-    "kubernetes.io/cluster/three-tier-eks" = "shared"
+    "kubernetes.io/role/internal-elb"           = "1"
+    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
   }
 }
 
@@ -84,7 +84,7 @@ resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.main.id
 
   tags = {
-    Name = "main-igw"
+    Name = "${var.name_prefix}-igw"
   }
 }
 
@@ -96,7 +96,7 @@ resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
 
   tags = {
-    Name = "public-rt"
+    Name = "${var.name_prefix}-public-rt"
   }
 }
 
@@ -124,7 +124,7 @@ resource "aws_eip" "nat" {
   domain = "vpc"
 
   tags = {
-    Name = "nat-eip"
+    Name = "${var.name_prefix}-nat-eip"
   }
 }
 
@@ -135,7 +135,7 @@ resource "aws_nat_gateway" "nat" {
   depends_on = [aws_internet_gateway.igw]
 
   tags = {
-    Name = "nat-gateway"
+    Name = "${var.name_prefix}-nat-gateway"
   }
 }
 
@@ -147,7 +147,7 @@ resource "aws_route_table" "private" {
   vpc_id = aws_vpc.main.id
 
   tags = {
-    Name = "private-rt"
+    Name = "${var.name_prefix}-private-rt"
   }
 }
 

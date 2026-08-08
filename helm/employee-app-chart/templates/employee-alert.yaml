@@ -1,3 +1,4 @@
+{{- if .Values.monitoring.enabled }}
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 
@@ -30,6 +31,7 @@ spec:
       annotations:
         summary: Employee app container restarting
         description: |
-          Pod {{ $labels.pod }}
-          container {{ $labels.container }}
+          Pod {{ `{{ $labels.pod }}` }}
+          container {{ `{{ $labels.container }}` }}
           restarted more than 3 times in 10 minutes
+{{- end }}

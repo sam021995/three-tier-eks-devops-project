@@ -1,0 +1,5 @@
+backend:
+  environment: production
+
+monitoring:
+  enabled: false

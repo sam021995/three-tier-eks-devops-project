@@ -1,16 +1,50 @@
-$env:AWS_PROFILE="sid_new"
+<#
+Provisions infra (terraform apply) and deploys the employee-app to the given environment.
+
+Usage:
+  .\scripts\deploy.ps1 -Env dev
+  .\scripts\deploy.ps1 -Env prod -AwsProfile sid_new
+#>
+
+param(
+    [Parameter(Mandatory = $true)]
+    [ValidateSet("dev", "test", "prod")]
+    [string]$Env,
+
+    [string]$AwsProfile = "sid_new",
+    [string]$Region = "eu-west-1",
+    [string]$MysqlUser = "admin",
+    [string]$MysqlPassword = "admin123",
+    [string]$MysqlRootPassword = "rootpass"
+)
+
+$env:AWS_PROFILE = $AwsProfile
+
+$RepoRoot = Split-Path -Parent $PSScriptRoot
+$EnvDir = Join-Path $RepoRoot "envs\$Env"
+$ChartDir = Join-Path $RepoRoot "helm\employee-app-chart"
+$ValuesFile = Join-Path $ChartDir "values-$Env.yaml"
+$ClusterName = "three-tier-eks-$Env"
+$GithubRoleArn = "arn:aws:iam::628658447302:role/GitHubActionsEKSDeployRole"
+
+Write-Host "========================================"
+Write-Host "Environment: $Env  |  Cluster: $ClusterName  |  Region: $Region"
+Write-Host "========================================"
 
 Write-Host "========================================"
 Write-Host "STEP 1 - Terraform Apply"
 Write-Host "========================================"
 
+Push-Location $EnvDir
+terraform init
 terraform apply -auto-approve
+Pop-Location
 
 Write-Host "========================================"
 Write-Host "STEP 2 - Update kubeconfig"
 Write-Host "========================================"
 
-aws eks update-kubeconfig --region eu-west-1 --name three-tier-eks
+aws eks update-kubeconfig --region $Region --name $ClusterName
 
 Write-Host "========================================"
 Write-Host "STEP 3 - Wait for Nodes Ready"
@@ -28,7 +62,7 @@ $nodeIps = kubectl get nodes -o jsonpath="{.items[*].status.addresses[?(@.type==
 
 $nodeSg = aws ec2 describe-instances `
     --filters "Name=private-ip-address,Values=$($nodeIps -replace ' ', ',')" `
-    --region eu-west-1 `
+    --region $Region `
     --query "Reservations[0].Instances[0].SecurityGroups[0].GroupId" `
     --output text
 
@@ -38,7 +72,7 @@ aws ec2 authorize-security-group-ingress `
     --group-id $nodeSg `
     --protocol all `
     --source-group $nodeSg `
-    --region eu-west-1 2>$null
+    --region $Region 2>$null
 
 Write-Host "Worker node self-ingress rule ensured"
 
@@ -48,18 +82,16 @@ Write-Host "========================================"
 Write-Host "STEP 3.2 - Ensure GitHub OIDC Role Has EKS Access"
 Write-Host "========================================"
 
-$githubRoleArn = "arn:aws:iam::628658447302:role/GitHubActionsEKSDeployRole"
-
 aws eks create-access-entry `
-    --cluster-name three-tier-eks `
-    --region eu-west-1 `
-    --principal-arn $githubRoleArn `
+    --cluster-name $ClusterName `
+    --region $Region `
+    --principal-arn $GithubRoleArn `
     --type STANDARD 2>$null
 
 aws eks associate-access-policy `
-    --cluster-name three-tier-eks `
-    --region eu-west-1 `
-    --principal-arn $githubRoleArn `
+    --cluster-name $ClusterName `
+    --region $Region `
+    --principal-arn $GithubRoleArn `
     --policy-arn arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy `
     --access-scope type=cluster 2>$null
 
@@ -69,25 +101,28 @@ Write-Host "========================================"
 Write-Host "STEP 4 - Ensure EBS CSI Addon"
 Write-Host "========================================"
 
-$addonExists = aws eks list-addons --cluster-name three-tier-eks --query "contains(addons, 'aws-ebs-csi-driver')" --output text
+$addonExists = aws eks list-addons --cluster-name $ClusterName --region $Region --query "contains(addons, 'aws-ebs-csi-driver')" --output text
 
 if ($addonExists -eq "False") {
 
     Write-Host "EBS CSI Addon not found. Creating..."
 
     aws eks create-addon `
-        --cluster-name three-tier-eks `
+        --cluster-name $ClusterName `
+        --region $Region `
         --addon-name aws-ebs-csi-driver
 
     Write-Host "Finding Node Role..."
 
     $nodegroup = aws eks list-nodegroups `
-        --cluster-name three-tier-eks `
+        --cluster-name $ClusterName `
+        --region $Region `
         --query "nodegroups[0]" `
         --output text
 
     $nodeRoleArn = aws eks describe-nodegroup `
-        --cluster-name three-tier-eks `
+        --cluster-name $ClusterName `
+        --region $Region `
         --nodegroup-name $nodegroup `
         --query "nodegroup.nodeRole" `
         --output text
@@ -115,7 +150,8 @@ $status = ""
 for ($i = 1; $i -le $maxAttempts; $i++) {
 
     $status = aws eks describe-addon `
-        --cluster-name three-tier-eks `
+        --cluster-name $ClusterName `
+        --region $Region `
         --addon-name aws-ebs-csi-driver `
         --query "addon.status" `
         --output text 2>$null
@@ -143,7 +179,8 @@ if ($status -ne "ACTIVE") {
     for ($i = 1; $i -le 18; $i++) {
 
         $status = aws eks describe-addon `
-            --cluster-name three-tier-eks `
+            --cluster-name $ClusterName `
+            --region $Region `
             --addon-name aws-ebs-csi-driver `
             --query "addon.status" `
             --output text 2>$null
@@ -165,7 +202,7 @@ if ($status -ne "ACTIVE") {
 
 kubectl get pods -n kube-system | findstr ebs
 
-Write-Host "EBS CSI Addon is ACTIVE" 
+Write-Host "EBS CSI Addon is ACTIVE"
 
 Write-Host "========================================"
 Write-Host "STEP 5 - Install/Upgrade NGINX Ingress"
@@ -199,11 +236,12 @@ Write-Host "STEP 8 - Deploy Application via Helm"
 Write-Host "========================================"
 
 helm upgrade --install employee-app `
-    "D:\Terraform practice 3 tier\three-tier-eks-terraform\env\prod\employee-app-chart" `
+    $ChartDir `
     -n employee-app `
-    --set mysql.user=admin `
-    --set mysql.password=admin123 `
-    --set mysql.rootPassword=rootpass
+    -f $ValuesFile `
+    --set mysql.user=$MysqlUser `
+    --set mysql.password=$MysqlPassword `
+    --set mysql.rootPassword=$MysqlRootPassword
 
 Write-Host "========================================"
 Write-Host "STEP 9 - Wait for App Components"
@@ -231,10 +269,11 @@ Write-Host "STEP 12 - Watch Pods"
 Write-Host "========================================"
 
 kubectl get pods -n employee-app
+
 <#
-Write-Host "========================================"
-Write-Host "STEP 13 - Install Prometheus + Grafana"
-Write-Host "========================================"
+Optional: Prometheus + Grafana monitoring stack.
+Deploy this once, then set `monitoring.enabled: true` in values-$Env.yaml
+so the chart's employee-alert.yaml PrometheusRule gets installed too.
 
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts 2>$null
 helm repo update
@@ -243,10 +282,7 @@ helm upgrade --install monitoring prometheus-community/kube-prometheus-stack `
     -n monitoring `
     --create-namespace
 
-Write-Host "Waiting for monitoring pods to be ready..."
-
 kubectl rollout status statefulset/prometheus-monitoring-kube-prometheus-prometheus `
     -n monitoring `
     --timeout=300s
-
 #>
