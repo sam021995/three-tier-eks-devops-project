@@ -12,7 +12,12 @@
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
         },
         "StringLike": {
-          "token.actions.githubusercontent.com:sub": "repo:sam021995/three-tier-eks-devops-project:ref:refs/heads/main"
+          "token.actions.githubusercontent.com:sub": [
+            "repo:sam021995/three-tier-eks-devops-project:ref:refs/heads/main",
+            "repo:sam021995/three-tier-eks-devops-project:environment:dev",
+            "repo:sam021995/three-tier-eks-devops-project:environment:test",
+            "repo:sam021995/three-tier-eks-devops-project:environment:prod"
+          ]
         }
       }
     }
