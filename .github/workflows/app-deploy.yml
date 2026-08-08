@@ -1,20 +1,16 @@
-name: Application CI-CD Pipeline
+name: Application Deploy
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "app/frontend/**"
-      - "app/backend/**"
-      - "helm/employee-app-chart/**"
-      - ".github/workflows/app-deploy.yml"
-
   workflow_dispatch:
-
-concurrency:
-  group: employee-app-deploy
-  cancel-in-progress: false
+    inputs:
+      environment:
+        description: "Environment to deploy to"
+        required: true
+        type: choice
+        options:
+          - dev
+          - test
+          - prod
 
 permissions:
   id-token: write
@@ -156,13 +152,10 @@ jobs:
           docker push $ECR_REGISTRY/$BACKEND_REPO:${{ github.run_number }}
           docker push $ECR_REGISTRY/$BACKEND_REPO:latest
 
-  # ---------------------------------------------------------------------
-  # dev - deploys immediately after a successful build
-  # ---------------------------------------------------------------------
-  deploy-dev:
+  deploy:
     runs-on: ubuntu-latest
     needs: build-and-push
-    environment: dev
+    environment: ${{ github.event.inputs.environment }}
 
     steps:
       - name: Checkout Code
@@ -183,12 +176,12 @@ jobs:
       - name: Ensure GitHub OIDC Role Has EKS Access
         run: |
           aws eks create-access-entry \
-            --cluster-name three-tier-eks-dev \
+            --cluster-name three-tier-eks-${{ github.event.inputs.environment }} \
             --region $AWS_REGION \
             --principal-arn ${{ env.GITHUB_ROLE_ARN }} \
             --type STANDARD || true
           aws eks associate-access-policy \
-            --cluster-name three-tier-eks-dev \
+            --cluster-name three-tier-eks-${{ github.event.inputs.environment }} \
             --region $AWS_REGION \
             --principal-arn ${{ env.GITHUB_ROLE_ARN }} \
             --policy-arn arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy \
@@ -196,11 +189,11 @@ jobs:
 
       - name: Update kubeconfig
         run: |
-          aws eks update-kubeconfig --region $AWS_REGION --name three-tier-eks-dev
+          aws eks update-kubeconfig --region $AWS_REGION --name three-tier-eks-${{ github.event.inputs.environment }}
 
       - name: Helm Lint Employee App Chart
         run: |
-          helm lint helm/employee-app-chart -f helm/employee-app-chart/values-dev.yaml
+          helm lint helm/employee-app-chart -f helm/employee-app-chart/values-${{ github.event.inputs.environment }}.yaml
 
       - name: Deploy Application Using Helm
         run: |
@@ -208,145 +201,7 @@ jobs:
             --install \
             --namespace employee-app \
             --create-namespace \
-            -f helm/employee-app-chart/values-dev.yaml \
-            --set frontend.image.repository=$ECR_REGISTRY/$FRONTEND_REPO \
-            --set frontend.image.tag=${{ github.run_number }} \
-            --set backend.image.repository=$ECR_REGISTRY/$BACKEND_REPO \
-            --set backend.image.tag=${{ github.run_number }} \
-            --wait \
-            --atomic \
-            --timeout 5m
-
-      - name: Verify Frontend Rollout
-        run: |
-          kubectl rollout status deployment/frontend -n employee-app --timeout=120s
-
-      - name: Verify Backend Rollout
-        run: |
-          kubectl rollout status deployment/backend -n employee-app --timeout=120s
-
-  # ---------------------------------------------------------------------
-  # test - promotes the same build once dev succeeds
-  # ---------------------------------------------------------------------
-  deploy-test:
-    runs-on: ubuntu-latest
-    needs: deploy-dev
-    environment: test
-
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Configure AWS Credentials Using OIDC
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ env.GITHUB_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Install kubectl
-        uses: azure/setup-kubectl@v4
-
-      - name: Install Helm
-        uses: azure/setup-helm@v4
-
-      - name: Ensure GitHub OIDC Role Has EKS Access
-        run: |
-          aws eks create-access-entry \
-            --cluster-name three-tier-eks-test \
-            --region $AWS_REGION \
-            --principal-arn ${{ env.GITHUB_ROLE_ARN }} \
-            --type STANDARD || true
-          aws eks associate-access-policy \
-            --cluster-name three-tier-eks-test \
-            --region $AWS_REGION \
-            --principal-arn ${{ env.GITHUB_ROLE_ARN }} \
-            --policy-arn arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy \
-            --access-scope type=cluster || true
-
-      - name: Update kubeconfig
-        run: |
-          aws eks update-kubeconfig --region $AWS_REGION --name three-tier-eks-test
-
-      - name: Helm Lint Employee App Chart
-        run: |
-          helm lint helm/employee-app-chart -f helm/employee-app-chart/values-test.yaml
-
-      - name: Deploy Application Using Helm
-        run: |
-          helm upgrade employee-app helm/employee-app-chart \
-            --install \
-            --namespace employee-app \
-            --create-namespace \
-            -f helm/employee-app-chart/values-test.yaml \
-            --set frontend.image.repository=$ECR_REGISTRY/$FRONTEND_REPO \
-            --set frontend.image.tag=${{ github.run_number }} \
-            --set backend.image.repository=$ECR_REGISTRY/$BACKEND_REPO \
-            --set backend.image.tag=${{ github.run_number }} \
-            --wait \
-            --atomic \
-            --timeout 5m
-
-      - name: Verify Frontend Rollout
-        run: |
-          kubectl rollout status deployment/frontend -n employee-app --timeout=120s
-
-      - name: Verify Backend Rollout
-        run: |
-          kubectl rollout status deployment/backend -n employee-app --timeout=120s
-
-  # ---------------------------------------------------------------------
-  # prod - gated behind the "production" Environment's required reviewers
-  # ---------------------------------------------------------------------
-  deploy-prod:
-    runs-on: ubuntu-latest
-    needs: deploy-test
-    environment: production
-
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Configure AWS Credentials Using OIDC
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ env.GITHUB_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Install kubectl
-        uses: azure/setup-kubectl@v4
-
-      - name: Install Helm
-        uses: azure/setup-helm@v4
-
-      - name: Ensure GitHub OIDC Role Has EKS Access
-        run: |
-          aws eks create-access-entry \
-            --cluster-name three-tier-eks-prod \
-            --region $AWS_REGION \
-            --principal-arn ${{ env.GITHUB_ROLE_ARN }} \
-            --type STANDARD || true
-          aws eks associate-access-policy \
-            --cluster-name three-tier-eks-prod \
-            --region $AWS_REGION \
-            --principal-arn ${{ env.GITHUB_ROLE_ARN }} \
-            --policy-arn arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy \
-            --access-scope type=cluster || true
-
-      - name: Update kubeconfig
-        run: |
-          aws eks update-kubeconfig --region $AWS_REGION --name three-tier-eks-prod
-
-      - name: Helm Lint Employee App Chart
-        run: |
-          helm lint helm/employee-app-chart -f helm/employee-app-chart/values-prod.yaml
-
-      - name: Deploy Application Using Helm
-        run: |
-          helm upgrade employee-app helm/employee-app-chart \
-            --install \
-            --namespace employee-app \
-            --create-namespace \
-            -f helm/employee-app-chart/values-prod.yaml \
+            -f helm/employee-app-chart/values-${{ github.event.inputs.environment }}.yaml \
             --set frontend.image.repository=$ECR_REGISTRY/$FRONTEND_REPO \
             --set frontend.image.tag=${{ github.run_number }} \
             --set backend.image.repository=$ECR_REGISTRY/$BACKEND_REPO \

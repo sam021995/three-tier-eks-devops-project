@@ -1,0 +1,79 @@
+name: Infra Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to destroy"
+        required: true
+        type: choice
+        options:
+          - dev
+          - test
+          - prod
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: eu-west-1
+  GITHUB_ROLE_ARN: arn:aws:iam::628658447302:role/GitHubActionsEKSDeployRole
+
+jobs:
+  teardown:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    defaults:
+      run:
+        working-directory: envs/${{ github.event.inputs.environment }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials Using OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.GITHUB_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Install eksctl
+        uses: eksctl-io/setup-eksctl@v1
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --region $AWS_REGION --name three-tier-eks-${{ github.event.inputs.environment }}
+
+      - name: Remove App, Monitoring and Ingress
+        run: |
+          helm uninstall monitoring -n monitoring || true
+          kubectl delete namespace monitoring --ignore-not-found=true
+
+          kubectl delete namespace employee-app --ignore-not-found=true
+
+          helm uninstall ingress-nginx -n ingress-nginx || true
+          kubectl delete namespace ingress-nginx --ignore-not-found=true
+
+      - name: Remove EBS CSI Addon
+        run: |
+          CLUSTER=three-tier-eks-${{ github.event.inputs.environment }}
+          eksctl delete addon --name aws-ebs-csi-driver --cluster "$CLUSTER" --region $AWS_REGION || true
+          aws cloudformation delete-stack \
+            --stack-name "eksctl-$CLUSTER-addon-aws-ebs-csi-driver" \
+            --region $AWS_REGION || true
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Destroy
+        run: terraform destroy -auto-approve -input=false

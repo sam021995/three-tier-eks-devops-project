@@ -1,0 +1,165 @@
+name: Infra Apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to provision"
+        required: true
+        type: choice
+        options:
+          - dev
+          - test
+          - prod
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: eu-west-1
+  GITHUB_ROLE_ARN: arn:aws:iam::628658447302:role/GitHubActionsEKSDeployRole
+
+jobs:
+  terraform-apply:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    defaults:
+      run:
+        working-directory: envs/${{ github.event.inputs.environment }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials Using OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.GITHUB_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        run: terraform plan -input=false
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve -input=false
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --region $AWS_REGION --name three-tier-eks-${{ github.event.inputs.environment }}
+
+      - name: Wait for Nodes Ready
+        run: |
+          kubectl wait --for=condition=Ready nodes --all --timeout=300s
+          kubectl get nodes
+
+      - name: Ensure Worker Node SG Allows Cross-Node Traffic
+        run: |
+          NODE_IPS=$(kubectl get nodes -o jsonpath="{.items[*].status.addresses[?(@.type=='InternalIP')].address}")
+          NODE_IPS_CSV=$(echo "$NODE_IPS" | tr ' ' ',')
+
+          NODE_SG=$(aws ec2 describe-instances \
+            --filters "Name=private-ip-address,Values=$NODE_IPS_CSV" \
+            --region $AWS_REGION \
+            --query "Reservations[0].Instances[0].SecurityGroups[0].GroupId" \
+            --output text)
+
+          echo "Worker Node Security Group: $NODE_SG"
+
+          aws ec2 authorize-security-group-ingress \
+            --group-id "$NODE_SG" \
+            --protocol all \
+            --source-group "$NODE_SG" \
+            --region $AWS_REGION || true
+
+      - name: Ensure GitHub OIDC Role Has EKS Access
+        run: |
+          aws eks create-access-entry \
+            --cluster-name three-tier-eks-${{ github.event.inputs.environment }} \
+            --region $AWS_REGION \
+            --principal-arn ${{ env.GITHUB_ROLE_ARN }} \
+            --type STANDARD || true
+          aws eks associate-access-policy \
+            --cluster-name three-tier-eks-${{ github.event.inputs.environment }} \
+            --region $AWS_REGION \
+            --principal-arn ${{ env.GITHUB_ROLE_ARN }} \
+            --policy-arn arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy \
+            --access-scope type=cluster || true
+
+      - name: Ensure EBS CSI Addon
+        run: |
+          CLUSTER=three-tier-eks-${{ github.event.inputs.environment }}
+
+          ADDON_EXISTS=$(aws eks list-addons --cluster-name "$CLUSTER" --region $AWS_REGION \
+            --query "contains(addons, 'aws-ebs-csi-driver')" --output text)
+
+          if [ "$ADDON_EXISTS" = "False" ]; then
+            echo "EBS CSI Addon not found. Creating..."
+            aws eks create-addon --cluster-name "$CLUSTER" --region $AWS_REGION --addon-name aws-ebs-csi-driver
+
+            NODEGROUP=$(aws eks list-nodegroups --cluster-name "$CLUSTER" --region $AWS_REGION \
+              --query "nodegroups[0]" --output text)
+
+            NODE_ROLE_ARN=$(aws eks describe-nodegroup --cluster-name "$CLUSTER" --region $AWS_REGION \
+              --nodegroup-name "$NODEGROUP" --query "nodegroup.nodeRole" --output text)
+
+            ROLE_NAME=$(basename "$NODE_ROLE_ARN")
+
+            aws iam attach-role-policy \
+              --role-name "$ROLE_NAME" \
+              --policy-arn arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy
+
+            echo "Waiting 60 seconds for IAM propagation..."
+            sleep 60
+          else
+            echo "EBS CSI Addon already exists"
+          fi
+
+          echo "Waiting for EBS CSI Addon to become ACTIVE..."
+          STATUS=""
+          for i in $(seq 1 30); do
+            STATUS=$(aws eks describe-addon --cluster-name "$CLUSTER" --region $AWS_REGION \
+              --addon-name aws-ebs-csi-driver --query "addon.status" --output text 2>/dev/null || echo "")
+            echo "Addon Status: $STATUS"
+            [ "$STATUS" = "ACTIVE" ] && break
+            sleep 10
+          done
+
+          if [ "$STATUS" != "ACTIVE" ]; then
+            echo "Restarting EBS CSI Controller Pods..."
+            kubectl delete pod -n kube-system -l app=ebs-csi-controller --ignore-not-found=true
+            sleep 30
+            for i in $(seq 1 18); do
+              STATUS=$(aws eks describe-addon --cluster-name "$CLUSTER" --region $AWS_REGION \
+                --addon-name aws-ebs-csi-driver --query "addon.status" --output text 2>/dev/null || echo "")
+              echo "Addon Status: $STATUS"
+              [ "$STATUS" = "ACTIVE" ] && break
+              sleep 10
+            done
+          fi
+
+          if [ "$STATUS" != "ACTIVE" ]; then
+            echo "ERROR: EBS CSI Addon failed to become ACTIVE"
+            exit 1
+          fi
+
+      - name: Install/Upgrade NGINX Ingress
+        run: |
+          helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx || true
+          helm repo update
+          helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+            --namespace ingress-nginx \
+            --create-namespace
+          kubectl rollout status deployment/ingress-nginx-controller -n ingress-nginx --timeout=300s
