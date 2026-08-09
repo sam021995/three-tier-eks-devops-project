@@ -12,11 +12,13 @@ data:
     USE employees;
 
     CREATE TABLE IF NOT EXISTS employees (
-      id INT PRIMARY KEY,
-      name VARCHAR(100)
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      email VARCHAR(150),
+      department VARCHAR(100)
     );
 
-    INSERT INTO employees VALUES
-    (1,'John'),
-    (2,'Alice'),
-    (3,'David');
+    INSERT INTO employees (name, email, department) VALUES
+    ('John', 'john@example.com', 'Engineering'),
+    ('Alice', 'alice@example.com', 'Product'),
+    ('David', 'david@example.com', 'Sales');
