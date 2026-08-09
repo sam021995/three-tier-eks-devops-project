@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { motion } from "framer-motion";
 
 function EmployeeForm({ employee, onSave, onCancel }) {
   const [name, setName] = useState(employee?.name || "");
@@ -16,8 +17,17 @@ function EmployeeForm({ employee, onSave, onCancel }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <form
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+    >
+      <motion.form
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        transition={{ duration: 0.15 }}
         onSubmit={handleSubmit}
         className="bg-slate-800 rounded-xl p-6 w-full max-w-sm shadow-xl space-y-4"
       >
@@ -70,8 +80,8 @@ function EmployeeForm({ employee, onSave, onCancel }) {
             {saving ? "Saving..." : "Save"}
           </button>
         </div>
-      </form>
-    </div>
+      </motion.form>
+    </motion.div>
   );
 }
 

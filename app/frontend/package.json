@@ -7,8 +7,12 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^13.5.0",
+    "framer-motion": "^11.18.2",
+    "lucide-react": "^0.474.0",
+    "papaparse": "^5.4.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "react-router-dom": "^6.28.1",
     "react-scripts": "5.0.1",
     "web-vitals": "^2.1.4"
   },
@@ -27,6 +31,11 @@
     "extends": [
       "react-app",
       "react-app/jest"
+    ]
+  },
+  "jest": {
+    "transformIgnorePatterns": [
+      "/node_modules/(?!lucide-react)/"
     ]
   },
   "browserslist": {
