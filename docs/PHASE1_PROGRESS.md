@@ -49,7 +49,29 @@ build-and-run loop we'll repeat before every push from here on.
 
 ## Milestone 2 — Auth Service (new)
 
-**Status:** Not started
+**Status:** In progress — Part A done (standalone app + local Docker test)
+**PR:** phase1/milestone-2-auth-service
+
+**What we did (Part A):**
+Built `services/auth-service` from scratch: Flask app with `/api/auth/register`,
+`/api/auth/login` (issues a JWT signed with a shared HS256 secret), and
+`/api/auth/verify` (a manual-testing helper — employee-service will verify
+tokens itself later using the shared secret, not by calling this endpoint,
+per ADR 0001's "no unnecessary service-to-service calls" principle). User
+data lives in SQLite rather than MySQL — a genuinely separate data store
+from employee-service, per ADR 0001's "no shared database" rule.
+
+**What we achieved / learned:**
+Built and ran the image locally, then exercised every path before writing
+any deployment manifests: health check, register, login, verify with a
+valid token, verify with no token, login with a wrong password, and
+registering a duplicate username. All behaved correctly on the first try —
+no issues to log this time.
+
+**Part B (next):** Helm chart + Kubernetes manifests, deployed to the dev
+cluster standalone (still not wired to employee-service — that's Milestone 3).
+
+---
 
 ---
 
