@@ -99,7 +99,7 @@ jobs:
 
       - name: Build Backend Image
         run: |
-          cd app/backend
+          cd services/employee-service
           docker build \
             -t $ECR_REGISTRY/$BACKEND_REPO:${{ github.run_number }} \
             -t $ECR_REGISTRY/$BACKEND_REPO:latest .
