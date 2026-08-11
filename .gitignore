@@ -4,6 +4,10 @@
 *.tfstate.*
 crash.log
 
+# Python
+__pycache__/
+*.pyc
+
 # Node modules
 node_modules/
 

@@ -27,7 +27,23 @@ independence rather than a monolith split across folders.
 
 ## Milestone 1 — Repo restructure
 
-**Status:** Not started
+**Status:** Done
+**PR:** phase1/milestone-1-repo-restructure
+
+**What we did:**
+Moved `app/backend` → `services/employee-service` (via `git mv`, so history
+follows the files), updated `.github/workflows/app-deploy.yml` to build from
+the new path, and fixed the README's layout section and workflow filenames
+to match reality. No application logic changed — this was purely establishing
+the `services/` convention from ADR 0001.
+
+**What we achieved / learned:**
+Verified locally with `docker build` + `docker run` from the new path before
+pushing, hitting `/api/health` to confirm the moved service actually boots —
+not just that the Dockerfile builds. Confirmed `/api/employees` fails locally
+as expected (no reachable database), which is a useful failure mode to
+recognize rather than mistake for a real bug. This is the local
+build-and-run loop we'll repeat before every push from here on.
 
 ---
 
