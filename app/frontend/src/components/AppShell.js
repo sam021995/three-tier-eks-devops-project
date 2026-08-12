@@ -1,7 +1,8 @@
 import React from "react";
-import { NavLink, Outlet } from "react-router-dom";
-import { Users, BarChart2, Settings as SettingsIcon } from "lucide-react";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Users, BarChart2, Settings as SettingsIcon, LogIn, LogOut } from "lucide-react";
 import CommandPalette from "./CommandPalette";
+import { useAuth } from "../AuthContext";
 
 const navLinkClass = ({ isActive }) =>
   `flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -9,6 +10,14 @@ const navLinkClass = ({ isActive }) =>
   }`;
 
 function AppShell() {
+  const { isLoggedIn, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/");
+  };
+
   return (
     <div className="min-h-screen bg-slate-900 text-white">
       <header className="sticky top-0 z-20 backdrop-blur bg-slate-900/80 border-b border-slate-800">
@@ -27,9 +36,23 @@ function AppShell() {
             </NavLink>
           </nav>
 
-          <span className="text-xs text-slate-500 hidden sm:block">
-            Press Ctrl/Cmd+K
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-500 hidden sm:block">
+              Press Ctrl/Cmd+K
+            </span>
+            {isLoggedIn ? (
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium text-slate-300 hover:bg-slate-700"
+              >
+                <LogOut size={16} /> Log Out
+              </button>
+            ) : (
+              <NavLink to="/login" className={navLinkClass}>
+                <LogIn size={16} /> Log In
+              </NavLink>
+            )}
+          </div>
         </div>
       </header>
 

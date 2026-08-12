@@ -68,16 +68,63 @@ valid token, verify with no token, login with a wrong password, and
 registering a duplicate username. All behaved correctly on the first try —
 no issues to log this time.
 
-**Part B (next):** Helm chart + Kubernetes manifests, deployed to the dev
-cluster standalone (still not wired to employee-service — that's Milestone 3).
+**Part B (deferred):** Helm chart + Kubernetes manifests. Deliberately
+reordered to happen *after* Milestone 3 instead of right after Part A — see
+note below. When picked back up, it will be written by hand rather than
+generated, since writing the chart is itself the learning goal.
 
----
+**Reordering note:** after testing Part A purely through Postman/curl, there
+was no visible change at `http://localhost:3000` — which is expected (no
+frontend work happened in Part A) but not obviously so if you're only
+watching the browser. Doing Milestone 3 first gets a real, visible result
+(an actual login page) before spending more time on infrastructure work
+that, on its own, still produces nothing visible in the browser.
 
 ---
 
 ## Milestone 3 — Wire Employee Service → Auth
 
-**Status:** Not started
+**Status:** Done
+**PR:** phase1/milestone-3-wire-auth
+
+**What we did:**
+- `employee-service` now verifies JWTs itself via a shared `JWT_SECRET`
+  (no network call to auth-service) - added `@require_auth` to all five
+  `/api/employees*` routes, both reads and writes (reads were originally
+  left public per the ADR, then deliberately widened to also require auth
+  after discussion - see decision below).
+- Frontend: added `AuthContext` + `LoginPage`, wired `api.js` to attach
+  `Authorization: Bearer <token>` automatically when a token exists, and
+  added a `ProtectedRoute` wrapper so every page except `/login` redirects
+  there if not logged in.
+- Local dev: replaced the single-target CRA `proxy` field with
+  `setupProxy.js`, since the frontend now needs to reach two backend
+  services instead of one.
+
+**Decision: protect reads too, not just writes.** The original plan (and
+first implementation) only gated writes, matching the ADR. After testing,
+the page still showed data with no login at all - correct per that plan,
+but not what was actually wanted. Widened `@require_auth` to the GET
+routes too, so the API itself - not just the frontend page - requires a
+valid token.
+
+**Issues hit (see full details in the Issues Log):**
+1. `react-hooks/exhaustive-deps` build failure after adding an auth guard
+   inside a `useEffect` - fixed with `useCallback` and reordering the
+   function declaration.
+2. Frontend proxy silently 404'd on every API call - Express's
+   `app.use(path, ...)` strips the mount path before the proxy ever sees
+   it. Fixed by using `http-proxy-middleware`'s own `pathFilter` instead.
+3. A `npm start` process from Milestone 1, still running unnoticed for the
+   entire session since, was squatting on port 3000.
+
+**DevOps callout:** the shared `JWT_SECRET` between `auth-service` and
+`employee-service` was passed via plain `-e` flags for local testing only.
+In a real deployment this belongs in a Kubernetes Secret referenced by
+both Deployments' env - never typed on a command line or committed to a
+values file. This is exactly the kind of secrets-management concern Phase 1
+flagged early on; Part B (Helm, still deferred) is where it gets addressed
+properly.
 
 ---
 

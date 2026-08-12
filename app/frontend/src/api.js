@@ -1,10 +1,27 @@
 const API_BASE = "";
+const TOKEN_KEY = "authToken";
+
+export function getToken() {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+function setToken(token) {
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function clearToken() {
+  localStorage.removeItem(TOKEN_KEY);
+}
 
 async function request(path, options = {}) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...options
-  });
+  const token = getToken();
+  const headers = {
+    "Content-Type": "application/json",
+    ...(options.headers || {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {})
+  };
+
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -29,3 +46,12 @@ export const updateEmployee = (id, data) =>
 
 export const deleteEmployee = (id) =>
   request(`/api/employees/${id}`, { method: "DELETE" });
+
+export async function login(username, password) {
+  const data = await request("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password })
+  });
+  setToken(data.token);
+  return data;
+}
