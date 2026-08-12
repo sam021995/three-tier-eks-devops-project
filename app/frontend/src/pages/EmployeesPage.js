@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import Papa from "papaparse";
@@ -58,14 +58,6 @@ function EmployeesPage() {
     loadData();
   }, []);
 
-  useEffect(() => {
-    if (searchParams.get("add") === "1") {
-      setEditingEmployee(null);
-      setFormOpen(true);
-      setSearchParams({});
-    }
-  }, [searchParams, setSearchParams]);
-
   const departments = useMemo(
     () => Array.from(new Set(employees.map((e) => e.department).filter(Boolean))).sort(),
     [employees]
@@ -83,10 +75,17 @@ function EmployeesPage() {
     });
   }, [employees, searchTerm, departmentFilter]);
 
-  const openAddForm = () => {
+  const openAddForm = useCallback(() => {
     setEditingEmployee(null);
     setFormOpen(true);
-  };
+  }, []);
+
+  useEffect(() => {
+    if (searchParams.get("add") === "1") {
+      setSearchParams({});
+      openAddForm();
+    }
+  }, [searchParams, setSearchParams, openAddForm]);
 
   const openEditForm = (employee) => {
     setEditingEmployee(employee);

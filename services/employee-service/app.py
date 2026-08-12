@@ -1,5 +1,7 @@
 from flask import Flask, jsonify, request
+from functools import wraps
 import mysql.connector
+import jwt
 import os
 
 app = Flask(__name__)
@@ -15,6 +17,11 @@ DB_PASSWORD = os.environ.get("DB_PASSWORD")
 APP_VERSION = os.environ.get("APP_VERSION", "v1")
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
 
+# Shared with auth-service - both must be given the same value so tokens
+# issued by auth-service verify correctly here, with no network call
+# between the two services needed.
+JWT_SECRET = os.environ.get("JWT_SECRET", "dev-only-insecure-secret")
+
 # =========================
 # DB CONNECTION
 # =========================
@@ -25,6 +32,27 @@ def get_connection():
         password=DB_PASSWORD,
         database=DB_DATABASE
     )
+
+# =========================
+# AUTH (verifies tokens issued by auth-service)
+# =========================
+def require_auth(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return jsonify({"error": "missing Bearer token"}), 401
+
+        token = auth_header.removeprefix("Bearer ").strip()
+        try:
+            jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        except jwt.ExpiredSignatureError:
+            return jsonify({"error": "token expired"}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({"error": "invalid token"}), 401
+
+        return f(*args, **kwargs)
+    return wrapper
 
 # =========================
 # HEALTH API
@@ -40,6 +68,7 @@ def health():
 # EMPLOYEES API (CRUD)
 # =========================
 @app.route("/api/employees", methods=["GET"])
+@require_auth
 def list_employees():
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
@@ -54,6 +83,7 @@ def list_employees():
 
 
 @app.route("/api/employees/<int:employee_id>", methods=["GET"])
+@require_auth
 def get_employee(employee_id):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
@@ -71,6 +101,7 @@ def get_employee(employee_id):
 
 
 @app.route("/api/employees", methods=["POST"])
+@require_auth
 def create_employee():
     body = request.get_json(silent=True) or {}
     name = (body.get("name") or "").strip()
@@ -97,6 +128,7 @@ def create_employee():
 
 
 @app.route("/api/employees/<int:employee_id>", methods=["PUT"])
+@require_auth
 def update_employee(employee_id):
     body = request.get_json(silent=True) or {}
     name = (body.get("name") or "").strip()
@@ -126,6 +158,7 @@ def update_employee(employee_id):
 
 
 @app.route("/api/employees/<int:employee_id>", methods=["DELETE"])
+@require_auth
 def delete_employee(employee_id):
     conn = get_connection()
     cursor = conn.cursor()
